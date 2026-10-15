@@ -1,13 +1,12 @@
 import axios from 'axios';
+import apiClient from './client';
 import { normalizeMicrosoftLicense } from './microsoftSkus';
 import {
   mockSummary,
   mockUtilization,
   mockExpiring,
-  mockApplications,
   mockLicenses,
   mockUsers,
-  mockSyncJobs,
 } from './mockData';
 
 // Direct axios instance for root endpoints (/microsoft365, /slack, /health)
@@ -37,6 +36,23 @@ export const syncMicrosoft = () => rawClient.post('/microsoft365/sync');
 export const getSlackLicenseRaw = () => rawClient.get('/slack/license');
 export const getSlackInventoryRaw = () => rawClient.get('/slack/inventory');
 export const getSlackUsersRaw = () => rawClient.get('/slack/users');
+
+// ── App-Level Assigned Users (from license_assigned_users DB table) ───────────
+export const getAppAssignedUsers = async (appName) => {
+  if (appName === 'Microsoft 365') {
+    try {
+      const res = await rawClient.get('/microsoft365/assigned-users');
+      return res.data?.users || [];
+    } catch { return []; }
+  }
+  if (appName === 'Slack') {
+    try {
+      const res = await rawClient.get('/slack/assigned-users');
+      return res.data?.users || [];
+    } catch { return []; }
+  }
+  return [];
+};
 
 // ── Unified Licenses ─────────────────────────────────────────────────────────
 export const getLicenses = async () => {
@@ -443,7 +459,64 @@ export const getLicenseUsers = async (license) => {
     }
   }
 
-  // 2. Try generic backend endpoint (/licenses/:id/users)
+  // 2. For Slack licenses: take the licensed users list from license_assigned_users in DB!
+  if (license.application_name === 'Slack') {
+    const candidateIds = [
+      license.license_id,
+      license.db_license_id,
+      license.product_code,
+      'slack-1',
+      'slack',
+    ].filter(Boolean);
+
+    for (const cid of candidateIds) {
+      try {
+        const res = await rawClient.get(`/slack/licenses/${encodeURIComponent(cid)}/assigned-users`);
+        const users = res.data?.users || (Array.isArray(res.data) ? res.data : []);
+        if (users && users.length > 0) {
+          return {
+            data: users.map((u, i) => ({
+              user_id: u.user_id || `sl-${i + 1}`,
+              name: u.name || u.display_name || 'Slack User',
+              email: u.email,
+              role: u.role || 'Member',
+              status: u.status || 'active',
+              department: u.department || 'Engineering & Operations',
+              application_name: 'Slack',
+              license_id: license.license_id,
+              license_name: license.license_name || u.license_name || 'Slack Pro',
+              assigned_date: u.assigned_date || '2024-01-25',
+            })),
+          };
+        }
+      } catch {
+        // try next candidate
+      }
+    }
+
+    try {
+      const res = await rawClient.get('/slack/assigned-users');
+      const users = res.data?.users || (Array.isArray(res.data) ? res.data : []);
+      if (users && users.length > 0) {
+        return {
+          data: users.map((u, i) => ({
+            user_id: u.user_id || `sl-${i + 1}`,
+            name: u.name || u.display_name || 'Slack User',
+            email: u.email,
+            role: u.role || 'Member',
+            status: u.status || 'active',
+            department: u.department || 'Engineering & Operations',
+            application_name: 'Slack',
+            license_id: license.license_id,
+            license_name: license.license_name || 'Slack Pro',
+            assigned_date: u.assigned_date || '2024-01-25',
+          })),
+        };
+      }
+    } catch {}
+  }
+
+  // 3. Try generic backend endpoint (/licenses/:id/users)
   try {
     const res = await rawClient.get(`/licenses/${encodeURIComponent(license.license_id)}/users`);
     const users = res.data?.users || (Array.isArray(res.data) ? res.data : []);
@@ -454,7 +527,7 @@ export const getLicenseUsers = async (license) => {
     // Backend endpoint not yet implemented
   }
 
-  // 3. Slack live users if applicable
+  // 4. Slack live users if applicable
   if (license.application_name === 'Slack') {
     try {
       const slRes = await getSlackUsersRaw();
@@ -474,7 +547,7 @@ export const getLicenseUsers = async (license) => {
     } catch {}
   }
 
-  // 4. Filter matched mock users
+  // 5. Filter matched mock users
   const matched = mockUsers.filter(
     (u) =>
       u.license_id === license.license_id ||
@@ -485,7 +558,7 @@ export const getLicenseUsers = async (license) => {
     return { data: matched };
   }
 
-  // 5. Fallback sample users for this application
+  // 6. Fallback sample users for this application
   const appSlug = license.application_name.toLowerCase().replace(/[^a-z0-9]/g, '');
   return {
     data: [
@@ -517,7 +590,28 @@ export const getLicenseUsers = async (license) => {
 
 // ── Users ────────────────────────────────────────────────────────────────────
 export const getUsers = async () => {
-  // First, take the licensed users list from license_assigned_users in DB for Microsoft 365!
+  // Take assigned users list from license_assigned_users in DB!
+  try {
+    const slackRes = await rawClient.get('/slack/assigned-users');
+    const slackUsers = slackRes.data?.users || [];
+    const msRes = await rawClient.get('/microsoft365/assigned-users');
+    const msUsers = msRes.data?.users || [];
+    const allUsers = [...slackUsers, ...msUsers];
+    if (allUsers.length > 0) {
+      return {
+        data: allUsers.map((u, i) => ({
+          user_id: u.user_id || i + 1,
+          name: u.name || u.display_name || 'User',
+          email: u.email,
+          role: u.role || 'Member',
+          status: u.status || 'active',
+          department: u.department || 'Enterprise',
+          application_name: u.application_name || 'Application',
+          license_name: u.license_name,
+        })),
+      };
+    }
+  } catch {}
   try {
     const dbRes = await rawClient.get('/microsoft365/assigned-users');
     const dbUsers = dbRes.data?.users || [];
@@ -641,3 +735,26 @@ export const triggerSync = async (applicationId) => {
     },
   };
 };
+
+// ── License Request ──────────────────────────────────────────────────────────
+export const requestLicense = async (requestData) => {
+  const res = await apiClient.post('/license-requests', requestData);
+  return res.data;
+};
+
+export const getLicenseRequestOptions = () => (
+  apiClient.get('/license-requests/options')
+);
+
+export const getLicenseRequests = () => apiClient.get('/license-requests');
+
+export const getLicenseRequest = (requestId) => (
+  apiClient.get(`/license-requests/${encodeURIComponent(requestId)}`)
+);
+
+export const decideLicenseRequest = (requestId, decision, comments) => (
+  apiClient.post(
+    `/license-requests/${encodeURIComponent(requestId)}/decision`,
+    { decision, comments }
+  )
+);

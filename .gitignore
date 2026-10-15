@@ -1,0 +1,9 @@
+
+# Environment variables and secrets
+**/.env
+**/.env.*
+!**/.env.example
+
+# Runtime logs
+*_server.log
+*_server.err.log

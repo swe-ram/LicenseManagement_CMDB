@@ -7,6 +7,7 @@ const pageMeta = {
   '/applications': { title: 'Applications', subtitle: 'Manage all registered applications' },
   '/products': { title: 'Products', subtitle: 'Product catalog across applications' },
   '/licenses': { title: 'Licenses', subtitle: 'License inventory and assignments' },
+  '/license-requests': { title: 'License Requests', subtitle: 'Submit and track application license requests' },
   '/sync': { title: 'Sync Jobs', subtitle: 'Data synchronization history and status' },
   '/settings': { title: 'Settings', subtitle: 'Portal configuration' },
 };
