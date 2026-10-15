@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Settings, Database, Shield, Bell, Link, CheckCircle, XCircle, HardDrive } from 'lucide-react';
+import { Database, Shield, Bell, Link, CheckCircle, XCircle, HardDrive } from 'lucide-react';
 import { getHealth } from '../api/services';
 
 const SettingsPage = () => {
@@ -94,16 +94,8 @@ const SettingsPage = () => {
           </div>
         </div>
         <div className="card-body">
-          <div className="input-group" style={{ marginBottom: 14 }}>
-            <label className="input-label" htmlFor="entra-tenant">Microsoft Entra Tenant ID</label>
-            <input id="entra-tenant" className="input" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" />
-          </div>
-          <div className="input-group">
-            <label className="input-label" htmlFor="entra-client">Client ID</label>
-            <input id="entra-client" className="input" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" />
-          </div>
           <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 10 }}>
-            Configure Microsoft Entra ID settings. Credentials are stored securely via environment variables on the backend.
+            Shared development login is validated by the backend. Configure its username, password, and signing secret in the ignored backend .env file; never enter credentials in the frontend.
           </p>
         </div>
       </div>

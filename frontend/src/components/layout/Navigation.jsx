@@ -4,7 +4,7 @@ import {
   LayoutDashboard,
   AppWindow,
   Key,
-  Users,
+  ClipboardList,
   RefreshCw,
   ChevronLeft,
   ChevronRight,
@@ -18,8 +18,6 @@ import {
   AlertTriangle,
   Info,
   ArrowRight,
-  X,
-  ExternalLink,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { getHealth } from '../../api/services';
@@ -37,6 +35,7 @@ const navItems = [
     items: [
       { to: '/applications', label: 'Applications', icon: AppWindow },
       { to: '/licenses', label: 'Licenses', icon: Key },
+      { to: '/license-requests', label: 'License Requests', icon: ClipboardList },
     ],
   },
   {
@@ -426,7 +425,7 @@ export const Topbar = ({ collapsed, title, subtitle }) => {
                     <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{user?.email}</div>
                     {user?.provider && (
                       <div style={{ marginTop: 4, display: 'inline-block', fontSize: 11, padding: '2px 8px', borderRadius: 4, background: 'var(--primary-50)', color: 'var(--primary-700)', fontWeight: 500 }}>
-                        SSO: {user.provider}
+                        {user.provider}
                       </div>
                     )}
                   </div>
@@ -441,7 +440,7 @@ export const Topbar = ({ collapsed, title, subtitle }) => {
                   <button
                     className="sidebar-item"
                     style={{ borderRadius: 0, margin: 0, padding: '10px 16px', color: 'var(--danger-600)' }}
-                    onClick={() => { logout(); navigate('/login'); }}
+                    onClick={() => { void logout().finally(() => navigate('/login')); }}
                   >
                     <LogOut size={15} />
                     <span>Sign Out</span>

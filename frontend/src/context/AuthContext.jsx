@@ -1,4 +1,9 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import {
+  getCurrentSession,
+  loginWithCredentials,
+  logoutFromSession,
+} from '../auth/session';
 
 const AuthContext = createContext(null);
 
@@ -9,34 +14,67 @@ export const useAuth = () => {
 };
 
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(() => {
-    const stored = sessionStorage.getItem('user');
-    return stored ? JSON.parse(stored) : null;
-  });
+  const [user, setUser] = useState(null);
+  const [authReady, setAuthReady] = useState(false);
+  const [authError, setAuthError] = useState('');
 
-  const login = useCallback((credentials) => {
-    // Mock login — replace with MSAL or real auth
-    const mockUser = {
-      id: credentials.id || '1',
-      name: credentials.username || 'Admin User',
-      email: credentials.email || 'admin@company.com',
-      role: credentials.role || 'Enterprise Admin',
-      provider: credentials.provider || 'Direct Login',
-      avatar: credentials.avatar || credentials.username?.[0]?.toUpperCase() || 'A',
+  useEffect(() => {
+    let mounted = true;
+    getCurrentSession()
+      .then((sessionUser) => {
+        if (mounted) {
+          setUser({
+            ...sessionUser,
+            email: sessionUser.username,
+            provider: 'Shared development login',
+            avatar: (sessionUser.name || 'U')[0].toUpperCase(),
+          });
+        }
+      })
+      .catch((error) => {
+        if (error.response?.status !== 401) {
+          console.error('LicenseHub session could not be restored:', error);
+          if (mounted) setAuthError('Login status could not be checked. Please try again.');
+        }
+      })
+      .finally(() => {
+        if (mounted) setAuthReady(true);
+      });
+
+    return () => {
+      mounted = false;
     };
-    sessionStorage.setItem('user', JSON.stringify(mockUser));
-    sessionStorage.setItem('access_token', 'mock-jwt-token');
-    setUser(mockUser);
   }, []);
 
-  const logout = useCallback(() => {
-    sessionStorage.removeItem('user');
-    sessionStorage.removeItem('access_token');
-    setUser(null);
+  const login = useCallback(async (username, password) => {
+    const sessionUser = await loginWithCredentials(username, password);
+    setUser({
+      ...sessionUser,
+      email: sessionUser.username,
+      provider: 'Shared development login',
+      avatar: (sessionUser.name || 'U')[0].toUpperCase(),
+    });
+  }, []);
+
+  const logout = useCallback(async () => {
+    try {
+      await logoutFromSession();
+    } catch (error) {
+      console.error('Unable to revoke the LicenseHub session on the server:', error);
+    } finally {
+      setUser(null);
+    }
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, isAuthenticated: !!user }}>
+    <AuthContext.Provider value={{
+      user,
+      login,
+      logout,
+      authReady,
+      authError,
+      isAuthenticated: !!user,
+    }}>
       {children}
     </AuthContext.Provider>
   );

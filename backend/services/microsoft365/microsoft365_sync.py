@@ -1,3 +1,4 @@
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -16,107 +17,176 @@ from database.microsoft365_repository import (
     save_microsoft365_sync_log,
     save_microsoft365_users,
 )
-from database.models import License, LicenseAssignment, Microsoft365Data, User
+from database.models import (
+    License,
+    LicenseAssignment,
+    Microsoft365Data,
+    User,
+)
+
+
+def _get_department_name(user_item: dict[str, Any], user_row: User) -> str | None:
+    """Return a department name as text, never a Department ORM object."""
+
+    raw_department = user_item.get("department")
+
+    if isinstance(raw_department, str) and raw_department.strip():
+        return raw_department.strip()
+
+    department_record = getattr(user_row, "department", None)
+
+    if department_record is not None:
+        department_name = getattr(department_record, "name", None)
+        if isinstance(department_name, str) and department_name.strip():
+            return department_name.strip()
+
+    return None
 
 
 def sync_microsoft365_inventory() -> dict[str, Any]:
     application = save_microsoft365_application()
 
     try:
-        from services.microsoft365.microsoft365_license import get_microsoft365_license_inventory
-        from services.microsoft365.microsoft365_users import get_microsoft365_user_inventory
+        from services.microsoft365.microsoft365_license import (
+            get_microsoft365_license_inventory,
+        )
+        from services.microsoft365.microsoft365_users import (
+            get_microsoft365_user_inventory,
+        )
 
         license_payload = get_microsoft365_license_inventory()
         user_payload = get_microsoft365_user_inventory()
 
+        license_items = license_payload.get("licenses", [])
+        user_items = user_payload.get("users", [])
+
         license_result = save_microsoft365_licenses(
-            license_payload.get("licenses", []),
+            license_items,
             application=application,
         )
+
         vendor_result = save_microsoft365_data(
-            license_payload.get("licenses", []),
+            license_items,
             application=application,
         )
+
+        # IMPORTANT:
+        # This repository function must also handle department names correctly.
+        # See the additional required fix below.
         user_result = save_microsoft365_users(
-            user_payload.get("users", []),
+            user_items,
             application=application,
         )
 
         db = SessionLocal()
+
         try:
             license_rows = (
                 db.query(License)
                 .filter(License.application_id == application.id)
                 .all()
             )
+
             license_by_product: dict[str, list[License]] = {}
+            license_by_type: dict[str, list[License]] = {}
+
             for license_row in license_rows:
                 if license_row.product:
-                    license_by_product.setdefault(license_row.product, []).append(
-                        license_row
-                    )
-            license_by_type: dict[str, list[License]] = {}
-            for license_row in license_rows:
+                    license_by_product.setdefault(
+                        license_row.product, []
+                    ).append(license_row)
+
                 if license_row.license_type:
-                    license_by_type.setdefault(license_row.license_type, []).append(
-                        license_row
-                    )
+                    license_by_type.setdefault(
+                        license_row.license_type, []
+                    ).append(license_row)
 
             sku_rows = (
                 db.query(Microsoft365Data)
-                .filter(Microsoft365Data.application_id == application.id)
+                .filter(
+                    Microsoft365Data.application_id == application.id
+                )
                 .all()
             )
+
             active_sku_ids = {
                 str(item["sku_id"])
-                for item in license_payload.get("licenses", [])
+                for item in license_items
                 if item.get("sku_id")
             }
+
             sku_to_license: dict[str, License] = {}
+
             for sku_row in sku_rows:
-                if sku_row.sku_id not in active_sku_ids:
+                sku_id = str(sku_row.sku_id)
+
+                if sku_id not in active_sku_ids:
                     continue
-                matching_licenses = license_by_product.get(sku_row.product, [])
+
+                matching_licenses = license_by_product.get(
+                    sku_row.product, []
+                )
+
                 if not matching_licenses and sku_row.sku_part_number:
                     matching_licenses = license_by_type.get(
-                        sku_row.sku_part_number,
-                        [],
+                        sku_row.sku_part_number, []
                     )
+
                 if len(matching_licenses) > 1:
                     raise ValueError(
-                        f"Microsoft Graph SKU {sku_row.sku_id} matches "
+                        f"Microsoft Graph SKU {sku_id} matches "
                         "multiple license records"
                     )
+
                 if matching_licenses:
-                    sku_to_license[sku_row.sku_id] = matching_licenses[0]
+                    sku_to_license[sku_id] = matching_licenses[0]
 
             user_rows = (
                 db.query(User)
                 .filter(User.application_id == application.id)
                 .all()
             )
-            user_lookup = {user.external_user_id: user for user in user_rows}
+
+            user_lookup = {
+                str(user.external_user_id): user
+                for user in user_rows
+                if user.external_user_id
+            }
 
             assignment_records: list[dict[str, Any]] = []
             assigned_user_records: list[dict[str, Any]] = []
-            for user_item in user_payload.get("users", []):
+
+            for user_item in user_items:
                 external_user_id = user_item.get("external_user_id")
+
                 if not external_user_id:
                     continue
 
-                user_row = user_lookup.get(external_user_id)
+                user_row = user_lookup.get(str(external_user_id))
+
                 if user_row is None:
                     continue
 
+                department_name = _get_department_name(
+                    user_item,
+                    user_row,
+                )
+
                 assigned_skus = user_item.get("assigned_licenses") or []
-                seen = set()
-                for sku_id in assigned_skus:
+                seen_license_ids: set[int] = set()
+
+                for raw_sku_id in assigned_skus:
+                    sku_id = str(raw_sku_id)
                     license_row = sku_to_license.get(sku_id)
 
-                    if not license_row or license_row.id in seen:
+                    if not license_row:
                         continue
 
-                    seen.add(license_row.id)
+                    if license_row.id in seen_license_ids:
+                        continue
+
+                    seen_license_ids.add(license_row.id)
+
                     assignment_records.append(
                         {
                             "license_id": license_row.id,
@@ -125,6 +195,7 @@ def sync_microsoft365_inventory() -> dict[str, Any]:
                             "status": "assigned",
                         }
                     )
+
                     assigned_user_records.append(
                         {
                             "application_id": application.id,
@@ -133,6 +204,8 @@ def sync_microsoft365_inventory() -> dict[str, Any]:
                             "sku_id": sku_id,
                             "display_name": user_row.name,
                             "email": user_row.email,
+                            # LicenseAssignedUser.department is a string column.
+                            "department": department_name,
                             "external_user_id": user_row.external_user_id,
                             "status": "assigned",
                             "assigned_at": datetime.utcnow(),
@@ -141,7 +214,10 @@ def sync_microsoft365_inventory() -> dict[str, Any]:
 
             existing_assignments = (
                 db.query(LicenseAssignment)
-                .join(License, LicenseAssignment.license_id == License.id)
+                .join(
+                    License,
+                    LicenseAssignment.license_id == License.id,
+                )
                 .filter(License.application_id == application.id)
                 .all()
             )
@@ -153,6 +229,7 @@ def sync_microsoft365_inventory() -> dict[str, Any]:
 
             for assignment in existing_assignments:
                 key = (assignment.license_id, assignment.user_id)
+
                 if key not in current_keys:
                     assignment.status = "revoked"
                     assignment.assigned_date = datetime.utcnow()
@@ -163,14 +240,12 @@ def sync_microsoft365_inventory() -> dict[str, Any]:
                 assignment_records,
                 application_id=application.id,
             )
+
             assigned_users_result = bulk_upsert_assigned_users(
                 application_id=application.id,
                 assigned_users=assigned_user_records,
             )
-            current_keys = {
-                (record["license_id"], record["user_id"])
-                for record in assignment_records
-            }
+
             mark_stale_assignments_revoked(
                 application_id=application.id,
                 current_keys=current_keys,
@@ -194,15 +269,27 @@ def sync_microsoft365_inventory() -> dict[str, Any]:
             return {
                 "success": True,
                 "application": "Microsoft 365",
-                "licenses_processed": int(license_result.get("total", 0)),
-                "microsoft365_data_processed": int(vendor_result.get("total", 0)),
-                "users_processed": int(user_result.get("total", 0)),
-                "assignments_processed": int(assignment_result.get("total", 0)),
-                "assigned_users_processed": int(assigned_users_result.get("total", 0)),
+                "licenses_processed": int(
+                    license_result.get("total", 0)
+                ),
+                "microsoft365_data_processed": int(
+                    vendor_result.get("total", 0)
+                ),
+                "users_processed": int(
+                    user_result.get("total", 0)
+                ),
+                "assignments_processed": int(
+                    assignment_result.get("total", 0)
+                ),
+                "assigned_users_processed": int(
+                    assigned_users_result.get("total", 0)
+                ),
                 "sync_status": "completed",
             }
+
         finally:
             db.close()
+
     except Exception as exc:
         try:
             save_microsoft365_sync_log(
@@ -213,4 +300,5 @@ def sync_microsoft365_inventory() -> dict[str, Any]:
             )
         except Exception:
             pass
+
         raise

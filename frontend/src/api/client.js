@@ -8,27 +8,20 @@ const apiClient = axios.create({
     'Content-Type': 'application/json',
   },
   timeout: 30000,
+  withCredentials: true,
 });
 
-// Request interceptor — attach auth token
-apiClient.interceptors.request.use(
-  (config) => {
-    const token = sessionStorage.getItem('access_token');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
-  },
-  (error) => Promise.reject(error)
-);
-
-// Response interceptor — handle 401
 apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
-      sessionStorage.removeItem('access_token');
-      window.location.href = '/login';
+    const requestUrl = error.config?.url || '';
+    const isAuthenticationRequest = requestUrl.startsWith('/auth/');
+    if (
+      error.response?.status === 401
+      && !isAuthenticationRequest
+      && window.location.pathname !== '/login'
+    ) {
+      window.location.assign('/login');
     }
     return Promise.reject(error);
   }

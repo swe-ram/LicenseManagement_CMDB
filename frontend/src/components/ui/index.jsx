@@ -79,11 +79,17 @@ export const Card = ({ title, subtitle, actions, children, style }) => (
   </div>
 );
 
-export const Modal = ({ open, title, onClose, children, footer }) => {
+export const Modal = ({ open, title, onClose, children, footer, style, maxWidth }) => {
   if (!open) return null;
   return (
     <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && onClose?.()}>
-      <div className="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+      <div
+        className="modal"
+        style={{ ...(maxWidth ? { maxWidth } : {}), ...(style || {}) }}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="modal-title"
+      >
         <div className="modal-header">
           <h3 className="modal-title" id="modal-title">{title}</h3>
           <button

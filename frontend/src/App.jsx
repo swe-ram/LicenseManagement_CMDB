@@ -7,6 +7,8 @@ import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
 import ApplicationsPage from './pages/ApplicationsPage';
 import LicensesPage from './pages/LicensesPage';
+import LicenseRequestsPage from './pages/LicenseRequestsPage';
+import ApprovalPage from './pages/ApprovalPage';
 import SyncJobsPage from './pages/SyncJobsPage';
 import SettingsPage from './pages/SettingsPage';
 
@@ -16,6 +18,7 @@ const App = () => (
       <Routes>
         {/* Public */}
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/approvals/:token" element={<ApprovalPage />} />
 
         {/* Protected — all inside AppLayout */}
         <Route
@@ -30,6 +33,7 @@ const App = () => (
           <Route path="applications" element={<ApplicationsPage />} />
           <Route path="products" element={<Navigate to="/licenses" replace />} />
           <Route path="licenses" element={<LicensesPage />} />
+          <Route path="license-requests" element={<LicenseRequestsPage />} />
           <Route path="sync" element={<SyncJobsPage />} />
           <Route path="settings" element={<SettingsPage />} />
         </Route>
