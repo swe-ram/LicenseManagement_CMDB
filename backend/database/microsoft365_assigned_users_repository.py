@@ -40,6 +40,7 @@ def bulk_upsert_assigned_users(
                 existing.sku_id = row.get("sku_id")
                 existing.display_name = row.get("display_name")
                 existing.email = row.get("email")
+                existing.department = row.get("department")
                 existing.external_user_id = row.get("external_user_id")
                 existing.status = row.get("status") or "assigned"
                 existing.last_synced_at = synced_at
@@ -53,6 +54,7 @@ def bulk_upsert_assigned_users(
                         sku_id=row.get("sku_id"),
                         display_name=row.get("display_name"),
                         email=row.get("email"),
+                        department=row.get("department"),
                         external_user_id=row.get("external_user_id"),
                         status=row.get("status") or "assigned",
                         assigned_at=row.get("assigned_at") or synced_at,
@@ -151,6 +153,12 @@ def get_assigned_users_by_license(license_id: int | str) -> list[dict[str, Any]]
                 else "2024-01-15"
             )
 
+            department = (
+                assigned_row.department
+                or (getattr(user_row, "department", None) if user_row else None)
+                or "Enterprise"
+            )
+
             result.append(
                 {
                     "license_id": assigned_row.license_id,
@@ -162,7 +170,7 @@ def get_assigned_users_by_license(license_id: int | str) -> list[dict[str, Any]]
                     "external_user_id": assigned_row.external_user_id,
                     "role": role,
                     "status": status,
-                    "department": "Enterprise",
+                    "department": department,
                     "sku_id": assigned_row.sku_id,
                     "assigned_date": assigned_date,
                 }
@@ -206,6 +214,12 @@ def get_all_assigned_users_flat(license_id: int | str | None = None) -> list[dic
                 else "2024-01-15"
             )
 
+            department = (
+                assigned_row.department
+                or (getattr(user_row, "department", None) if user_row else None)
+                or "Enterprise"
+            )
+
             result.append(
                 {
                     "license_id": assigned_row.license_id,
@@ -217,7 +231,7 @@ def get_all_assigned_users_flat(license_id: int | str | None = None) -> list[dic
                     "external_user_id": assigned_row.external_user_id,
                     "role": role,
                     "status": status,
-                    "department": "Enterprise",
+                    "department": department,
                     "sku_id": assigned_row.sku_id,
                     "assigned_date": assigned_date,
                 }
@@ -267,6 +281,7 @@ def get_all_assigned_users_by_license() -> dict[str, list[dict[str, Any]]]:
                         "user_id": assigned_row.user_id,
                         "display_name": assigned_row.display_name,
                         "email": assigned_row.email,
+                        "department": assigned_row.department or "Enterprise",
                         "external_user_id": assigned_row.external_user_id,
                         "status": assigned_row.status,
                     }

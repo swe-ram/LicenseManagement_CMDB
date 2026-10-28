@@ -292,11 +292,25 @@ from routers.microsoft365 import (
 from routers.slack import (
     router as slack_router,
 )
+from routers.license_requests import (
+    legacy_router as legacy_license_requests_router,
+    router as license_requests_router,
+)
+from routers.public_approvals import (
+    legacy_router as legacy_public_approvals_router,
+    router as public_approvals_router,
+)
+from auth.session import router as authentication_router
 
 
+app.include_router(authentication_router)
 app.include_router(slack_router)
 
 app.include_router(microsoft365_router)
+app.include_router(license_requests_router)
+app.include_router(legacy_license_requests_router)
+app.include_router(public_approvals_router)
+app.include_router(legacy_public_approvals_router)
 
 
 # ============================================================
@@ -377,4 +391,3 @@ if __name__ == "__main__":
         port=8000,
         reload=True,
     )
-

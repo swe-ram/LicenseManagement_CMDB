@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   AppWindow, Key, Users, TrendingUp,
   AlertTriangle, RefreshCw, ArrowUpRight, CheckCircle2,
-  ExternalLink, Clock, Sparkles, Layers,
+  ExternalLink, Clock, Sparkles, Layers, Briefcase,
 } from 'lucide-react';
 import { Spinner, Badge, AlertBanner, ToolLogo, Modal } from '../components/ui';
 import {
@@ -437,6 +437,7 @@ const DashboardPage = () => {
       <Modal
         open={!!selectedLicense}
         title=""
+        maxWidth={740}
         onClose={() => setSelectedLicense(null)}
         footer={<button className="btn btn-secondary" onClick={() => setSelectedLicense(null)}>Close</button>}
       >
@@ -471,7 +472,8 @@ const DashboardPage = () => {
                   <thead>
                     <tr style={{ background: 'var(--gray-50)', position: 'sticky', top: 0 }}>
                       <th>User</th>
-                      <th>Department / Role</th>
+                      <th>Department</th>
+                      <th>Role</th>
                       <th>Status</th>
                     </tr>
                   </thead>
@@ -483,8 +485,26 @@ const DashboardPage = () => {
                           <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{u.email}</div>
                         </td>
                         <td>
-                          <div style={{ fontSize: 12 }}>{u.role || 'Member'}</div>
-                          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{u.department || 'Enterprise'}</div>
+                          <span
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 5,
+                              padding: '3px 8px',
+                              borderRadius: 6,
+                              fontSize: 12,
+                              fontWeight: 600,
+                              background: 'var(--gray-100)',
+                              color: 'var(--text-primary)',
+                              border: '1px solid var(--border-color)',
+                            }}
+                          >
+                            <Briefcase size={12} style={{ color: 'var(--primary-600)', flexShrink: 0 }} />
+                            <span>{u.department || 'Enterprise'}</span>
+                          </span>
+                        </td>
+                        <td>
+                          <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-secondary)' }}>{u.role || 'Member'}</div>
                         </td>
                         <td>
                           <Badge variant={u.status === 'active' ? 'success' : 'neutral'}>

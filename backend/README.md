@@ -227,3 +227,89 @@ The response groups currently assigned users by Microsoft 365 license and
 includes licenses with no current assignments. Previously assigned users are
 retained with `status = "revoked"` in the database but omitted from the active
 user lists.
+
+## Development shared-account authentication
+
+Authentication uses backend environment variables only. Set
+`AUTH_USERNAME`, `AUTH_PASSWORD`, and a random `AUTH_TOKEN_SECRET` of at least
+32 bytes in the backend `.env` file. `AUTH_TOKEN_TTL_MINUTES` controls the
+session lifetime (1-1440 minutes); `AUTH_COOKIE_SECURE` must be `true` when
+serving over HTTPS and can be `false` for local HTTP development. Keep `.env`
+out of source control. Never put these values in Vite environment variables.
+
+The API issues a signed, expiring session token in an HttpOnly, SameSite=Strict
+cookie. The shared account intentionally has no employee identity or application
+roles. It cannot view or submit individual license requests, or take approval
+actions. Request APIs continue to require authenticated identities and
+server-side authorization; do not map the shared login to an employee or grant
+it `License.Requester`, `License.Approver`, or `License.Admin`. Individual
+request/approval workflows require a separately configured, individually
+authenticated account.
+
+Authentication endpoints are `POST /api/v1/auth/login`, `GET
+/api/v1/auth/me`, and `POST /api/v1/auth/logout`. Expired sessions are rejected
+with HTTP 401 and the frontend returns to the login page.
+
+## License request approval workflow
+
+Outside local test mode, the request APIs remain protected by the authenticated
+session and existing server-side role/ownership checks. The shared account does
+not identify an employee or approver and cannot access individual request
+records or submit decisions.
+
+For local development only, the License Requests employee-selection workflow
+can be enabled by setting both `APP_ENV=development` (or `local`) and
+`LICENSE_REQUEST_TEST_MODE=true` in the backend `.env`. The test-mode session
+flag is issued only to logins from a loopback address, and request test routes
+also require loopback access. Leave the flag false or unset outside local
+development. Test mode allows this shared account to list requests, load
+employee/license options, create requests for an explicitly selected database
+employee, and inspect saved request details. The request records the selected
+employee as the requested-for employee and marks `requester_identity` as
+`shared-development-account`; it does not identify that employee as the
+submitter. Test requests do not create approval records or enable approve/reject
+actions. When no approval record exists, the UI marks pending stages as a
+non-persistent test preview, not approval history.
+
+The additive request migration also adds `requester_identity` and allows
+`approver_id` to be null for requests awaiting an approver mapping. Apply the
+reviewed migration to the configured local database before using this flow.
+
+The portal database already contains `license_requests`, `license_approvals`,
+and `department_approvers`. The API maps to those existing tables and to their
+existing foreign keys (`employee_id`, `request_number`, and the department
+approver row IDs); it does not create parallel request or approval tables.
+Migration `001_license_request_approval.sql` only adds the request idempotency
+key and urgency fields and creates uniqueness indexes for official request
+numbers and non-null per-employee idempotency keys. It raises an error rather
+than removing or changing duplicate request records if the existing data
+prevents a unique request-number index.
+
+After reviewing the migration and backing up production data, apply the
+additive PostgreSQL migration explicitly from this directory:
+
+```powershell
+.\.venv\Scripts\python.exe .\migrations\apply_license_request_migration.py
+```
+
+The migration runner verifies that the portal's existing tables are present
+before changing anything. Do not use the command against production until the
+migration has been reviewed and approved. It does not create tables; use the
+project's normal schema setup for a fresh development database before applying
+it.
+
+Request endpoints:
+
+- `POST /api/v1/license-requests` creates a request and its pending approval
+- `GET /api/v1/license-requests` lists only requests visible to the caller
+- `GET /api/v1/license-requests/options` returns the caller's employee record
+  and licenses available in the database
+- `GET /api/v1/license-requests/{request_id}` returns authorized request detail
+  and the recorded approval history
+- `GET /api/v1/license-requests/{request_id}/approvals` returns approval history
+- `POST /api/v1/license-requests/{request_id}/decision` approves or rejects a
+  request assigned to the authenticated approver
+
+Request IDs use the database-generated primary key (`LIC-<year>-<id>`), and
+request creation accepts a per-user idempotency key to make a network retry
+return the original saved request rather than create another.
