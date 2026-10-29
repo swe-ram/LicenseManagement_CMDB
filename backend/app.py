@@ -196,6 +196,43 @@ async def run_slack_sync():
 
 
 # ============================================================
+# SOPHOS AUTOMATIC SYNC
+# ============================================================
+
+async def run_sophos_sync():
+    """
+    Automatically synchronize Sophos data to PostgreSQL
+    when FastAPI starts.
+    """
+    try:
+        from services.sophos.sophos_sync import sync_sophos_inventory
+
+        print()
+        print("=" * 70)
+        print("SOPHOS AUTOMATIC SYNC STARTED")
+        print("=" * 70)
+
+        result = await asyncio.to_thread(sync_sophos_inventory)
+
+        print("=" * 70)
+        print("SOPHOS AUTOMATIC SYNC COMPLETED")
+        print("=" * 70)
+        if isinstance(result, dict):
+            print(f"Licenses processed: {result.get('licenses_processed', 0)}")
+            print(f"Sync status: {result.get('sync_status', 'completed')}")
+        print()
+
+    except Exception as exc:
+        print()
+        print("=" * 70)
+        print("SOPHOS AUTOMATIC SYNC FAILED")
+        print("=" * 70)
+        print(f"Error: {exc}")
+        print("=" * 70)
+        print()
+
+
+# ============================================================
 # FASTAPI LIFESPAN
 # ============================================================
 
@@ -208,7 +245,7 @@ async def lifespan(app: FastAPI):
     print("=" * 70)
 
     # --------------------------------------------------------
-    # Start both synchronization tasks
+    # Start synchronization tasks
     # --------------------------------------------------------
 
     microsoft365_task = asyncio.create_task(
@@ -219,8 +256,13 @@ async def lifespan(app: FastAPI):
         run_slack_sync()
     )
 
+    sophos_task = asyncio.create_task(
+        run_sophos_sync()
+    )
+
     print("Microsoft 365 automatic sync started.")
     print("Slack automatic sync started.")
+    print("Sophos automatic sync started.")
     print("FastAPI is ready.")
     print("=" * 70)
     print()
@@ -239,6 +281,7 @@ async def lifespan(app: FastAPI):
     for task in (
         microsoft365_task,
         slack_task,
+        sophos_task,
     ):
         if not task.done():
             task.cancel()
@@ -301,12 +344,14 @@ from routers.public_approvals import (
     router as public_approvals_router,
 )
 from auth.session import router as authentication_router
+from routers.sophos import router as sophos_router
 
 
 app.include_router(authentication_router)
 app.include_router(slack_router)
 
 app.include_router(microsoft365_router)
+app.include_router(sophos_router)
 app.include_router(license_requests_router)
 app.include_router(legacy_license_requests_router)
 app.include_router(public_approvals_router)
@@ -369,6 +414,79 @@ async def get_license_users_direct(license_id: str):
                 }
         finally:
             db.close()
+
+    # If Sophos license requested
+    if (
+        "sophos" in license_id.lower()
+        or any(k in license_id.lower() for k in ["cix", "xg", "xstream", "email", "webserver", "appliance", "xsp", "emp", "wsp"])
+        or license_id in ["19", "20", "21", "22", "23", "9WRF-9LT7-F6QK-MMKR", "LKBUBQB-SVJ-CP8863ACM", "LK36MC8-1GQ-YFX7VJJT0", "LKPCL7S-LFW-V8B2DGF33", "V01001VHHQ7CP33"]
+    ):
+        from database.sophos_repository import get_sophos_users
+        sophos_users = get_sophos_users(license_id=license_id)
+        if sophos_users:
+            users_list = [
+                {
+                    "user_id": u["id"],
+                    "name": u["name"] or "Sophos User",
+                    "email": u["email"],
+                    "role": u["role"] or "User",
+                    "status": u["status"] or "active",
+                    "department": u["department"] or "Information Technology",
+                    "application_name": "Sophos",
+                    "license_id": license_id,
+                    "license_name": u.get("license_name") or u.get("assigned_products") or "Sophos License",
+                    "assigned_date": u.get("created_in_sophos_at") or "2024-01-01",
+                    "endpoint_hostname": u.get("endpoint_hostname"),
+                    "endpoint_os": u.get("endpoint_os"),
+                }
+                for u in sophos_users
+            ]
+            return {
+                "application": "Sophos",
+                "license_id": license_id,
+                "total_users": len(users_list),
+                "users": users_list,
+            }
+
+    # Check if license in database belongs to Sophos
+    db = SessionLocal()
+    try:
+        from database.models import License
+        lic_record = None
+        if license_id.isdigit():
+            lic_record = db.query(License).filter(License.id == int(license_id)).first()
+        if not lic_record:
+            lic_record = db.query(License).filter(License.product.ilike(f"%{license_id}%")).first()
+        if lic_record:
+            app_rec = db.query(Application).filter(Application.id == lic_record.application_id).first()
+            if app_rec and "sophos" in app_rec.name.lower():
+                from database.sophos_repository import get_sophos_users
+                sophos_users = get_sophos_users(license_id=lic_record.product or license_id)
+                users_list = [
+                    {
+                        "user_id": u["id"],
+                        "name": u["name"] or "Sophos User",
+                        "email": u["email"],
+                        "role": u["role"] or "User",
+                        "status": u["status"] or "active",
+                        "department": u["department"] or "Information Technology",
+                        "application_name": "Sophos",
+                        "license_id": license_id,
+                        "license_name": lic_record.product or u.get("license_name"),
+                        "assigned_date": u.get("created_in_sophos_at") or "2024-01-01",
+                        "endpoint_hostname": u.get("endpoint_hostname"),
+                        "endpoint_os": u.get("endpoint_os"),
+                    }
+                    for u in sophos_users
+                ]
+                return {
+                    "application": "Sophos",
+                    "license_id": license_id,
+                    "total_users": len(users_list),
+                    "users": users_list,
+                }
+    finally:
+        db.close()
 
     return {
         "license_id": license_id,

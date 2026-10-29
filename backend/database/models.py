@@ -442,6 +442,112 @@ class SlackData(Base):
     application = relationship("Application")
 
 
+class SophosData(Base):
+    __tablename__ = "sophos_data"
+
+    __table_args__ = (
+        UniqueConstraint(
+            "application_id",
+            "license_id",
+            name="uq_sophos_data_application_license",
+        ),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    application_id = Column(
+        Integer,
+        ForeignKey("applications.id"),
+        nullable=False,
+        index=True,
+    )
+
+    license_id = Column(String(255), index=True)
+    license_key = Column(String(255))
+    product_name = Column(String(255), nullable=False)
+    product_code = Column(String(255))
+    license_type = Column(String(100))
+    status = Column(String(50), default="active")
+
+    purchased_quantity = Column(Integer, default=0)
+    assigned_quantity = Column(Integer, default=0)
+    available_quantity = Column(Integer, default=0)
+
+    start_date = Column(Date)
+    expiration_date = Column(Date)
+    auto_renewal = Column(Boolean, default=False)
+
+    cost = Column(Float)
+    currency = Column(String(20), default="USD")
+    billing_cycle = Column(String(50))
+    data_source = Column(String(255), default="Sophos Central API")
+
+    synced_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(
+        DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+    )
+
+    application = relationship("Application")
+
+
+# Alias for compatibility if referenced as SophonData
+SophonData = SophosData
+
+
+class SophosUserData(Base):
+    __tablename__ = "sophos_userdata"
+
+    __table_args__ = (
+        UniqueConstraint(
+            "application_id",
+            "sophos_user_id",
+            name="uq_sophos_userdata_app_user",
+        ),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    application_id = Column(
+        Integer,
+        ForeignKey("applications.id"),
+        nullable=False,
+        index=True,
+    )
+
+    sophos_user_id = Column(String(255), nullable=False, index=True)
+    license_id = Column(String(255), nullable=True, index=True)
+    license_name = Column(String(255), nullable=True)
+    product_code = Column(String(100), nullable=True, index=True)
+    name = Column(String(255), nullable=False)
+    email = Column(String(255), index=True)
+    department = Column(String(255))
+    role = Column(String(100), default="User")
+    status = Column(String(50), default="active")
+    source_type = Column(String(100), default="custom")
+    endpoint_hostname = Column(String(255))
+    endpoint_os = Column(String(255))
+    assigned_products = Column(Text)
+    created_in_sophos_at = Column(DateTime)
+    last_activity = Column(DateTime)
+
+    synced_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(
+        DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+    )
+
+    application = relationship("Application")
+
+
+# Alias for compatibility if referenced as SophonUserData
+SophonUserData = SophosUserData
+
+
 class Usage(Base):
     __tablename__ = "usage"
 

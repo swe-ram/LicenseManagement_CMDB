@@ -77,6 +77,7 @@ const DashboardPage = () => {
         applications: [
           { application_name: 'Microsoft 365', status: 'active', licenses_count: 16, assigned_seats: 885, total_seats: 1040488 },
           { application_name: 'Slack', status: 'active', licenses_count: 1, assigned_seats: 11, total_seats: 12 },
+          { application_name: 'Sophos', status: 'active', licenses_count: 5, assigned_seats: 320, total_seats: 254 },
           { application_name: 'Lucidchart', status: 'inactive', licenses_count: 0, assigned_seats: 0, total_seats: 0 },
           { application_name: 'Box', status: 'inactive', licenses_count: 0, assigned_seats: 0, total_seats: 0 },
           { application_name: 'Zoom', status: 'inactive', licenses_count: 0, assigned_seats: 0, total_seats: 0 },

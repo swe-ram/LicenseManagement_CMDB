@@ -231,6 +231,38 @@ export const ToolLogo = ({ name, size = 32, className = '', style = {} }) => {
     );
   }
 
+  // Sophos
+  if (norm.includes('sophos') || norm.includes('sophon')) {
+    return (
+      <svg
+        width={size}
+        height={size}
+        viewBox="0 0 32 32"
+        fill="none"
+        className={className}
+        style={{ borderRadius: 6, flexShrink: 0, ...style }}
+      >
+        <rect width="32" height="32" rx="7" fill="#004890" />
+        <path
+          d="M16 5L24 8.5V15C24 20.2 20.6 24.8 16 26.5C11.4 24.8 8 20.2 8 15V8.5L16 5Z"
+          fill="#002D62"
+        />
+        <path
+          d="M16 7.2L22 9.8V15C22 19 19.5 22.8 16 24.2C12.5 22.8 10 19 10 15V9.8L16 7.2Z"
+          fill="#0072CE"
+        />
+        <path
+          d="M16 10L19.5 13.5L18.1 14.9L16 12.8L13.9 14.9L12.5 13.5L16 10Z"
+          fill="white"
+        />
+        <path
+          d="M12.5 16.5L16 20L19.5 16.5L18.1 15.1L16 17.2L13.9 15.1L12.5 16.5Z"
+          fill="#99D6FF"
+        />
+      </svg>
+    );
+  }
+
   // Default fallback
   return (
     <div

@@ -37,6 +37,11 @@ export const getSlackLicenseRaw = () => rawClient.get('/slack/license');
 export const getSlackInventoryRaw = () => rawClient.get('/slack/inventory');
 export const getSlackUsersRaw = () => rawClient.get('/slack/users');
 
+export const getSophosLicenseRaw = () => rawClient.get('/sophos/license');
+export const getSophosUsersRaw = (params) => rawClient.get('/sophos/users', { params });
+export const getSophosAuthRaw = () => rawClient.get('/sophos/auth');
+export const syncSophos = () => rawClient.post('/sophos/sync');
+
 // ── App-Level Assigned Users (from license_assigned_users DB table) ───────────
 export const getAppAssignedUsers = async (appName) => {
   if (appName === 'Microsoft 365') {
@@ -50,6 +55,17 @@ export const getAppAssignedUsers = async (appName) => {
       const res = await rawClient.get('/slack/assigned-users');
       return res.data?.users || [];
     } catch { return []; }
+  }
+  if (appName === 'Sophos') {
+    try {
+      const res = await rawClient.get('/sophos/users');
+      return res.data?.users || [];
+    } catch {
+      try {
+        const res = await rawClient.get('/licenses/Sophos/users');
+        return res.data?.users || [];
+      } catch { return []; }
+    }
   }
   return [];
 };
@@ -109,6 +125,47 @@ export const getLicenses = async () => {
     console.warn('Could not fetch live Slack license:', err.message);
   }
 
+  // 3. Fetch Sophos Licenses (from sophos_data table)
+  try {
+    const sophosRes = await getSophosLicenseRaw();
+    const sophosItems = sophosRes.data?.licenses || [];
+    sophosItems.forEach((item, idx) => {
+      const purchased = Number(item.purchased_quantity || 0);
+      const assigned = Number(item.assigned_quantity || 0);
+      const available = Number(item.available_quantity || Math.max(0, purchased - assigned));
+      const isFirewall = (item.data_source || '').toLowerCase().includes('firewall');
+
+      combined.push({
+        license_id: item.license_id || `sophos-${item.id || idx + 1}`,
+        db_license_id: item.id,
+        license_name: item.product_name || 'Sophos License',
+        product: item.product_name,
+        product_code: item.product_code || item.license_key || 'SOPHOS',
+        license_type: isFirewall ? 'Firewall Security' : (item.license_type === 'trial' ? 'Security Trial' : 'Endpoint Security'),
+        application_name: 'Sophos',
+        vendor: 'Sophos Ltd.',
+        total_quantity: purchased,
+        allocated_quantity: assigned,
+        used_quantity: assigned,
+        available_quantity: available,
+        cost_amount: item.cost || 0,
+        unit_cost: 0,
+        currency: item.currency || 'USD',
+        billing_frequency: (item.billing_cycle || 'annual').toLowerCase(),
+        status: item.status || 'active',
+        purchase_date: item.start_date || '2025-11-25',
+        start_date: item.start_date || '2025-11-25',
+        expiry_date: item.expiration_date || '2026-11-24',
+        auto_renew: Boolean(item.auto_renewal),
+        source_system: item.data_source || 'Sophos Central API (Live Sync)',
+        description: `${item.product_name}${item.license_key ? ` (License ID: ${item.license_key})` : ''} - synchronized from sophos_data table`,
+        badgeColor: 'blue',
+      });
+    });
+  } catch (err) {
+    console.warn('Could not fetch live Sophos licenses:', err.message);
+  }
+
   // If live calls returned licenses, return them; otherwise fall back to mockLicenses
   if (combined.length > 0) {
     return { data: combined };
@@ -142,6 +199,7 @@ export const getApplications = async () => {
 
   const msLics = allLics.filter((l) => l.application_name === 'Microsoft 365');
   const slackLics = allLics.filter((l) => l.application_name === 'Slack');
+  const sophosLics = allLics.filter((l) => l.application_name === 'Sophos');
   const lucidLics = allLics.filter((l) => l.application_name === 'Lucidchart');
   const boxLics = allLics.filter((l) => l.application_name === 'Box');
   const zoomLics = allLics.filter((l) => l.application_name === 'Zoom');
@@ -178,6 +236,21 @@ export const getApplications = async () => {
       total_seats: slackLics[0]?.total_quantity || 12,
       assigned_seats: slackLics[0]?.allocated_quantity || 11,
       created_at: '2024-01-25T09:00:00Z',
+      updated_at: new Date().toISOString(),
+    },
+    {
+      application_id: 'app-sophos',
+      application_name: 'Sophos',
+      application_code: 'SOPHOS',
+      vendor_name: 'Sophos Ltd.',
+      category: 'Cybersecurity & Endpoint Protection',
+      status: 'active',
+      criticality: 'critical',
+      business_unit: 'IT Security & Infrastructure',
+      licenses_count: sophosLics.length || 5,
+      total_seats: sophosLics.reduce((acc, l) => acc + (l.total_quantity || 0), 0) || 254,
+      assigned_seats: sophosLics.reduce((acc, l) => acc + (l.allocated_quantity || 0), 0) || 320,
+      created_at: '2024-01-10T00:00:00Z',
       updated_at: new Date().toISOString(),
     },
     {
@@ -324,8 +397,8 @@ export const getDashboardSummary = async () => {
   }
 
   const totalLicenses = licenses.length;
-  const totalApps = 8;
-  const activeApps = 2; // Microsoft 365 + Slack
+  const totalApps = 9;
+  const activeApps = 3; // Microsoft 365 + Slack + Sophos
   const inactiveApps = 6;
 
   let totalPurchased = 0;
@@ -527,6 +600,36 @@ export const getLicenseUsers = async (license) => {
     // Backend endpoint not yet implemented
   }
 
+  // 3.5. Sophos live users from sophos_userdata table (filtered by license)
+  if (license.application_name === 'Sophos' || String(license.license_id).toLowerCase().includes('sophos')) {
+    try {
+      const candidateId = license.license_id || license.product_code || license.license_name;
+      const sophosRes = await getSophosUsersRaw({
+        license_id: candidateId,
+        product_code: license.product_code,
+      });
+      const sUsers = sophosRes.data?.users || [];
+      if (sUsers.length > 0) {
+        return {
+          data: sUsers.map((u) => ({
+            user_id: u.sophos_user_id || u.id,
+            name: u.name || 'Sophos User',
+            email: u.email || '—',
+            role: u.role || 'User',
+            status: u.status || 'active',
+            department: u.department || 'Information Technology',
+            application_name: 'Sophos',
+            license_id: license.license_id,
+            license_name: u.license_name || license.license_name || u.assigned_products,
+            assigned_date: u.created_in_sophos_at ? u.created_in_sophos_at.split('T')[0] : '2024-01-01',
+            endpoint_hostname: u.endpoint_hostname,
+            endpoint_os: u.endpoint_os,
+          })),
+        };
+      }
+    } catch {}
+  }
+
   // 4. Slack live users if applicable
   if (license.application_name === 'Slack') {
     try {
@@ -686,6 +789,20 @@ export const getSyncJobs = async () => {
         records_failed: 0,
         error_message: null,
       },
+      {
+        id: 3,
+        sync_job_id: 3,
+        connector_id: 'sophos-central',
+        application_name: 'Sophos',
+        started_at: new Date(Date.now() - 1800000).toISOString(),
+        completed_at: new Date(Date.now() - 1795000).toISOString(),
+        status: 'success',
+        records_processed: 5,
+        records_created: 5,
+        records_updated: 0,
+        records_failed: 0,
+        error_message: null,
+      },
     ],
   };
 };
@@ -713,6 +830,26 @@ export const triggerSync = async (applicationId) => {
       };
     } catch (err) {
       console.warn('Sync Microsoft error:', err);
+    }
+  }
+
+  const isSophos = String(applicationId).toLowerCase().includes('sophos') || String(applicationId) === 'app-sophos';
+  if (isSophos) {
+    try {
+      const res = await syncSophos();
+      return {
+        data: {
+          id: Date.now(),
+          sync_job_id: Date.now(),
+          application_name: 'Sophos',
+          status: 'success',
+          records_processed: res.data?.licenses_processed || 5,
+          started_at: new Date().toISOString(),
+          completed_at: new Date().toISOString(),
+        },
+      };
+    } catch (err) {
+      console.warn('Sync Sophos error:', err);
     }
   }
 

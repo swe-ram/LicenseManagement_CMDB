@@ -5,6 +5,8 @@ from dotenv import load_dotenv
 from pydantic import BaseModel
 
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
+load_dotenv(Path(__file__).resolve().parents[2] / ".env")
+load_dotenv()
 
 
 class Settings(BaseModel):
@@ -14,6 +16,8 @@ class Settings(BaseModel):
     MS_TENANT_ID: str | None = os.getenv("MS_TENANT_ID") or None
     MS_CLIENT_ID: str | None = os.getenv("MS_CLIENT_ID") or None
     MS_CLIENT_SECRET: str | None = os.getenv("MS_CLIENT_SECRET") or None
+    SOPHOS_CLIENT_ID: str | None = os.getenv("SOPHOS_CLIENT_ID") or None
+    SOPHOS_CLIENT_SECRET: str | None = os.getenv("SOPHOS_CLIENT_SECRET") or None
     APP_NAME: str = "Slack License Inventory API"
     # ── Approval email (license request flow) ──
     MAIL_TRANSPORT: str = os.getenv("MAIL_TRANSPORT", "auto") or "auto"

@@ -66,4 +66,12 @@ if inspector.has_table("users"):
                 text("ALTER TABLE users ADD COLUMN IF NOT EXISTS department VARCHAR(255)")
             )
 
+if inspector.has_table("sophos_data"):
+    from database.sophos_repository import ensure_sophos_application
+    ensure_sophos_application()
+    print("Sophos table and application seeded successfully.")
+
+if inspector.has_table("sophos_userdata"):
+    print("Table 'sophos_userdata' created successfully.")
+
 print("Database tables created successfully!")

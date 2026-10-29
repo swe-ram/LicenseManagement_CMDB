@@ -41,6 +41,10 @@ const CATEGORY_ICONS = {
   'Video Conferencing': Video,
   'Project Management': Layers,
   'SASE & Security': ShieldAlert,
+  'Cybersecurity & Endpoint Protection': ShieldAlert,
+  'Endpoint Security': ShieldAlert,
+  'Firewall Security': Shield,
+  'Security Trial': Shield,
 };
 
 // ── License Users Modal ──────────────────────────────────────────────────────
@@ -315,18 +319,17 @@ const isAdminRole = (role) => {
   return ADMIN_ROLES.some((a) => r === a || r.includes('admin') || r.includes('owner'));
 };
 
-const AppUsersModal = ({ open, appName, roleFilter, users, onClose }) => {
+const AppUsersModal = ({ open, appName, roleFilter, users = [], onClose }) => {
   const [userSearch, setUserSearch] = useState('');
   const [departmentFilter, setDepartmentFilter] = useState('all');
   const [copiedEmail, setCopiedEmail] = useState('');
 
-  if (!open || !appName) return null;
-
-  const title = roleFilter === 'admin' ? `${appName} — Admins` : `${appName} — All Users`;
-
-  const displayUsers = roleFilter === 'admin'
-    ? users.filter((u) => isAdminRole(u.role))
-    : users;
+  const displayUsers = React.useMemo(() => {
+    if (!users || !Array.isArray(users)) return [];
+    return roleFilter === 'admin'
+      ? users.filter((u) => isAdminRole(u.role))
+      : users;
+  }, [users, roleFilter]);
 
   const departments = React.useMemo(() => {
     const set = new Set();
@@ -335,6 +338,8 @@ const AppUsersModal = ({ open, appName, roleFilter, users, onClose }) => {
     });
     return Array.from(set).sort();
   }, [displayUsers]);
+
+  if (!open || !appName) return null;
 
   const filteredUsers = displayUsers.filter((u) => {
     const q = userSearch.toLowerCase();
@@ -1302,7 +1307,7 @@ const LicensesPage = () => {
   // Fetch admin/user counts for active applications
   useEffect(() => {
     const fetchAppUsers = async () => {
-      const activeApps = ['Microsoft 365', 'Slack'];
+      const activeApps = ['Microsoft 365', 'Slack', 'Sophos'];
       const counts = {};
       for (const app of activeApps) {
         try {
